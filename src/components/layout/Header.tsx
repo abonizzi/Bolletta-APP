@@ -1,4 +1,3 @@
-import { Bell } from 'lucide-react'
 import { useAuth } from '@/hooks/useAuth'
 import { SyncStatusBadge } from '@/components/SyncStatus'
 
@@ -24,9 +23,6 @@ export function Header({ title, subtitle }: { title: string; subtitle?: string }
           <div className="md:hidden">
             <SyncStatusBadge compact />
           </div>
-          <button className="p-2 rounded-full hover:bg-slate-200/60 dark:hover:bg-slate-800 text-slate-500" aria-label="Notifiche">
-            <Bell size={18} />
-          </button>
           <div className="h-9 w-9 rounded-full bg-brand-600 text-white flex items-center justify-center text-xs font-semibold">
             {initials(name)}
           </div>

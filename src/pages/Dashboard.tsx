@@ -8,7 +8,7 @@ import { EmptyState } from '@/components/EmptyState'
 import { SkeletonList, Skeleton } from '@/components/Skeleton'
 import { useData } from '@/hooks/useData'
 import { useAuth } from '@/hooks/useAuth'
-import { billMonthKey, totalForCategoryInMonth, buildYearlySeries, availableYears } from '@/services/statistics'
+import { buildYearlySeries, availableYears, lastBillInfo, billPeriodLabel, summarizeRange } from '@/services/statistics'
 
 function greeting() {
   const h = new Date().getHours()
@@ -31,16 +31,23 @@ export function Dashboard() {
 
   const yearlySeries = useMemo(() => buildYearlySeries(bills, categories, effectiveYear), [bills, categories, effectiveYear])
 
-  const now = new Date()
-  const currentMonthKey = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`
-  const prevDate = new Date(now.getFullYear(), now.getMonth() - 1, 1)
-  const prevMonthKey = `${prevDate.getFullYear()}-${String(prevDate.getMonth() + 1).padStart(2, '0')}`
+  // Le bollette arrivano a posteriori: invece del "mese in corso" (quasi sempre vuoto)
+  // mostriamo l'ultima bolletta ricevuta per categoria e la media degli ultimi 12 mesi.
+  const lastBills = useMemo(() => {
+    return categories
+      .filter((c) => c.include_in_charts)
+      .map((category) => ({ category, info: lastBillInfo(bills, category.id) }))
+      .filter((x): x is { category: (typeof categories)[number]; info: NonNullable<ReturnType<typeof lastBillInfo>> } => x.info !== null)
+      .sort((a, b) => b.info.bill.billing_end.localeCompare(a.info.bill.billing_end))
+      .slice(0, 3)
+  }, [bills, categories])
+
+  const average12 = useMemo(() => {
+    const now = new Date()
+    return summarizeRange(bills, new Date(now.getFullYear(), now.getMonth() - 11, 1), now).monthlyAverage
+  }, [bills])
 
   const topCategories = useMemo(() => categories.filter((c) => c.include_in_charts), [categories])
-
-  const currentTotal = bills.filter((b) => billMonthKey(b) === currentMonthKey).reduce((s, b) => s + Number(b.amount), 0)
-  const prevTotal = bills.filter((b) => billMonthKey(b) === prevMonthKey).reduce((s, b) => s + Number(b.amount), 0)
-  const totalVariation = prevTotal > 0 ? ((currentTotal - prevTotal) / prevTotal) * 100 : null
 
   const yearBills = useMemo(() => {
     return bills
@@ -76,20 +83,25 @@ export function Dashboard() {
 
   return (
     <AppLayout title={`${greeting()}, ${name} 👋`} subtitle="La situazione delle tue spese domestiche">
+      <p className="font-semibold text-slate-900 dark:text-white mb-3">Ultime bollette ricevute</p>
       <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mb-6">
-        {topCategories.slice(0, 3).map((c) => {
-          const current = totalForCategoryInMonth(bills, c.id, currentMonthKey)
-          const prev = totalForCategoryInMonth(bills, c.id, prevMonthKey)
-          const variation = prev > 0 ? ((current - prev) / prev) * 100 : null
-          return (
-            <SummaryCard key={c.id} icon={<span>{c.icon}</span>} label={c.name} amount={current} variationPct={variation} colorClass="" />
-          )
-        })}
+        {lastBills.map(({ category: c, info }) => (
+          <SummaryCard
+            key={c.id}
+            icon={<span>{c.icon}</span>}
+            tint={c.color}
+            label={c.name}
+            amount={Number(info.bill.amount)}
+            subtitle={billPeriodLabel(info.bill)}
+            variationPct={info.variationPct}
+            variationLabel="rispetto alla bolletta precedente"
+          />
+        ))}
         <SummaryCard
           icon={<span>💰</span>}
-          label="Totale"
-          amount={currentTotal}
-          variationPct={totalVariation}
+          label="Media mensile"
+          amount={average12}
+          subtitle="ultimi 12 mesi"
           colorClass="bg-slate-900 text-white dark:bg-white dark:text-slate-900"
         />
       </div>

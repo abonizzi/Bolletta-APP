@@ -3,7 +3,7 @@ import { AppLayout } from '@/components/layout/AppLayout'
 import { CategoryExpenseChart } from '@/components/CategoryExpenseChart'
 import { ConsumptionChart } from '@/components/ConsumptionChart'
 import { useData } from '@/hooks/useData'
-import { billsInRange, summarizePeriod, buildMonthlySeries } from '@/services/statistics'
+import { summarizeRange, buildSeriesForRange } from '@/services/statistics'
 
 type FilterKey = '3m' | '6m' | '12m' | 'current_year' | 'previous_year' | 'custom'
 
@@ -16,24 +16,25 @@ const FILTERS: { key: FilterKey; label: string }[] = [
   { key: 'custom', label: 'Personalizzato' }
 ]
 
-function rangeForFilter(filter: FilterKey, customStart: string, customEnd: string): { start: Date; end: Date; months: number } {
+function rangeForFilter(filter: FilterKey, customStart: string, customEnd: string): { start: Date; end: Date } {
   const now = new Date()
+  // fino a fine del mese corrente, così riepilogo e grafici coprono gli stessi mesi interi
+  const endOfThisMonth = new Date(now.getFullYear(), now.getMonth() + 1, 0)
   switch (filter) {
     case '3m':
-      return { start: new Date(now.getFullYear(), now.getMonth() - 2, 1), end: now, months: 3 }
+      return { start: new Date(now.getFullYear(), now.getMonth() - 2, 1), end: endOfThisMonth }
     case '6m':
-      return { start: new Date(now.getFullYear(), now.getMonth() - 5, 1), end: now, months: 6 }
+      return { start: new Date(now.getFullYear(), now.getMonth() - 5, 1), end: endOfThisMonth }
     case '12m':
-      return { start: new Date(now.getFullYear(), now.getMonth() - 11, 1), end: now, months: 12 }
+      return { start: new Date(now.getFullYear(), now.getMonth() - 11, 1), end: endOfThisMonth }
     case 'current_year':
-      return { start: new Date(now.getFullYear(), 0, 1), end: now, months: now.getMonth() + 1 }
+      return { start: new Date(now.getFullYear(), 0, 1), end: endOfThisMonth }
     case 'previous_year':
-      return { start: new Date(now.getFullYear() - 1, 0, 1), end: new Date(now.getFullYear() - 1, 11, 31), months: 12 }
+      return { start: new Date(now.getFullYear() - 1, 0, 1), end: new Date(now.getFullYear() - 1, 11, 31) }
     case 'custom':
       return {
         start: customStart ? new Date(customStart) : new Date(now.getFullYear(), 0, 1),
-        end: customEnd ? new Date(customEnd) : now,
-        months: 12
+        end: customEnd ? new Date(customEnd) : endOfThisMonth
       }
   }
 }
@@ -44,15 +45,11 @@ export function Statistics() {
   const [customStart, setCustomStart] = useState('')
   const [customEnd, setCustomEnd] = useState('')
 
-  const { start, end, months } = rangeForFilter(filter, customStart, customEnd)
+  const { start, end } = rangeForFilter(filter, customStart, customEnd)
 
-  const periodBills = useMemo(() => billsInRange(bills, start, end), [bills, start.getTime(), end.getTime()])
-  const prevStart = new Date(start.getFullYear(), start.getMonth() - months, 1)
-  const prevEnd = new Date(start.getTime() - 1)
-  const prevBills = useMemo(() => billsInRange(bills, prevStart, prevEnd), [bills, prevStart.getTime(), prevEnd.getTime()])
-
-  const summary = useMemo(() => summarizePeriod(periodBills, prevBills), [periodBills, prevBills])
-  const series = useMemo(() => buildMonthlySeries(bills, categories, months), [bills, categories, months])
+  // il riepilogo conta solo la parte di ogni bolletta che cade nel periodo (in base al periodo di fatturazione)
+  const summary = useMemo(() => summarizeRange(bills, start, end), [bills, start.getTime(), end.getTime()])
+  const series = useMemo(() => buildSeriesForRange(bills, categories, start, end), [bills, categories, start.getTime(), end.getTime()])
 
   const consumptionCategories = categories.filter((c) => c.include_in_charts && c.consumption_unit !== 'none')
 
@@ -85,7 +82,7 @@ export function Statistics() {
         <>
           <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mb-6">
             <Stat label="Totale speso" value={summary.total.toLocaleString('it-IT', { style: 'currency', currency: 'EUR' })} />
-            <Stat label="Media mensile" value={summary.average.toLocaleString('it-IT', { style: 'currency', currency: 'EUR' })} />
+            <Stat label="Media mensile" value={summary.monthlyAverage.toLocaleString('it-IT', { style: 'currency', currency: 'EUR' })} />
             <Stat label="Numero bollette" value={summary.count.toString()} />
             <Stat label="Consumo totale" value={summary.totalConsumption.toLocaleString('it-IT')} />
           </div>

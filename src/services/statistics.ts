@@ -105,17 +105,30 @@ function applySplitToPoints(bills: Bill[], categories: Category[], points: Month
   }
 }
 
+/**
+ * Serie mensile per un intervallo qualsiasi (dal mese di `start` al mese di `end`, estremi inclusi),
+ * con ripartizione lineare per giorno delle bollette multi-mese. Massimo 60 mesi.
+ */
+export function buildSeriesForRange(bills: Bill[], categories: Category[], start: Date, end: Date): MonthlyPoint[] {
+  const spansYears = start.getFullYear() !== end.getFullYear()
+  const entries: Array<{ monthKey: string; label: string }> = []
+  const cursor = new Date(start.getFullYear(), start.getMonth(), 1)
+  const last = new Date(end.getFullYear(), end.getMonth(), 1)
+  while (cursor <= last) {
+    const key = monthKeyOf(cursor.getFullYear(), cursor.getMonth())
+    const yy = String(cursor.getFullYear()).slice(2)
+    entries.push({ monthKey: key, label: spansYears ? `${monthLabel(key)} ${yy}` : monthLabel(key) })
+    cursor.setMonth(cursor.getMonth() + 1)
+  }
+  const points = emptyPoints(entries.slice(-60))
+  applySplitToPoints(bills, categories, points)
+  return points
+}
+
 /** Serie degli ultimi N mesi (compreso quello corrente), con ripartizione lineare delle bollette multi-mese. */
 export function buildMonthlySeries(bills: Bill[], categories: Category[], months: number): MonthlyPoint[] {
   const now = new Date()
-  const entries = []
-  for (let i = months - 1; i >= 0; i--) {
-    const d = new Date(now.getFullYear(), now.getMonth() - i, 1)
-    entries.push({ monthKey: monthKeyOf(d.getFullYear(), d.getMonth()), label: monthLabel(monthKeyOf(d.getFullYear(), d.getMonth())) })
-  }
-  const points = emptyPoints(entries)
-  applySplitToPoints(bills, categories, points)
-  return points
+  return buildSeriesForRange(bills, categories, new Date(now.getFullYear(), now.getMonth() - (months - 1), 1), now)
 }
 
 /** Serie fissa di 12 mesi (Gennaio-Dicembre) per un anno solare specifico, con ripartizione lineare. */
@@ -134,26 +147,96 @@ export function buildYearlySeries(bills: Bill[], categories: Category[], year: n
 }
 
 export interface PeriodSummary {
+  /** Spesa che ricade nel periodo (bollette ripartite per giorno). */
   total: number
-  average: number
+  /** Spesa media di un mese, calcolata sui giorni effettivamente coperti dalle bollette. */
+  monthlyAverage: number
+  /** Bollette il cui periodo di fatturazione tocca l'intervallo. */
   count: number
   totalConsumption: number
-  variationPct: number | null
 }
 
-export function summarizePeriod(bills: Bill[], previousBills: Bill[]): PeriodSummary {
-  const total = bills.reduce((s, b) => s + (Number(b.amount) || 0), 0)
-  const totalConsumption = bills.reduce((s, b) => s + (Number(b.consumption_value) || 0), 0)
-  const count = bills.length
-  const average = count > 0 ? total / countDistinctMonths(bills) : 0
-  const prevTotal = previousBills.reduce((s, b) => s + (Number(b.amount) || 0), 0)
-  const variationPct = prevTotal > 0 ? ((total - prevTotal) / prevTotal) * 100 : null
-  return { total, average, count, totalConsumption, variationPct }
+const DAYS_PER_MONTH = 365.25 / 12
+
+/** Numero progressivo del giorno, da 'YYYY-MM-DD' o Date, senza problemi di fuso orario. */
+function dayIndex(d: string | Date): number {
+  if (typeof d === 'string') {
+    const m = /^(\d{4})-(\d{2})-(\d{2})/.exec(d)
+    if (m) return Math.floor(Date.UTC(Number(m[1]), Number(m[2]) - 1, Number(m[3])) / MS_PER_DAY)
+    const parsed = new Date(d)
+    return isNaN(parsed.getTime()) ? NaN : dayIndex(parsed)
+  }
+  return Math.floor(Date.UTC(d.getFullYear(), d.getMonth(), d.getDate()) / MS_PER_DAY)
 }
 
-function countDistinctMonths(bills: Bill[]): number {
-  const set = new Set(bills.map(billMonthKey))
-  return Math.max(set.size, 1)
+/** Giorni totali coperti da un insieme di intervalli, senza contare due volte le sovrapposizioni. */
+function unionLength(intervals: Array<[number, number]>): number {
+  const sorted = [...intervals].sort((a, b) => a[0] - b[0])
+  let total = 0
+  let curStart = NaN
+  let curEnd = NaN
+  for (const [from, to] of sorted) {
+    if (isNaN(curStart)) {
+      curStart = from
+      curEnd = to
+    } else if (from <= curEnd + 1) {
+      curEnd = Math.max(curEnd, to)
+    } else {
+      total += curEnd - curStart + 1
+      curStart = from
+      curEnd = to
+    }
+  }
+  if (!isNaN(curStart)) total += curEnd - curStart + 1
+  return total
+}
+
+/**
+ * Riepilogo di un intervallo di date che tiene conto del periodo di fatturazione:
+ * di ogni bolletta conta solo la parte di giorni che cade nell'intervallo.
+ * La media mensile è la spesa di ciascuna categoria divisa per i giorni che le sue
+ * bollette coprono davvero (non per i mesi in cui "iniziano"), riportata a un mese medio
+ * di 30,4 giorni e sommata tra le categorie.
+ */
+export function summarizeRange(bills: Bill[], start: Date, end: Date): PeriodSummary {
+  const rangeStart = dayIndex(start)
+  const rangeEnd = dayIndex(end)
+  let total = 0
+  let totalConsumption = 0
+  let count = 0
+  const amountByCategory = new Map<string, number>()
+  const intervalsByCategory = new Map<string, Array<[number, number]>>()
+
+  for (const bill of bills) {
+    const billStart = dayIndex(bill.billing_start)
+    if (isNaN(billStart)) continue
+    let billEnd = dayIndex(bill.billing_end)
+    if (isNaN(billEnd) || billEnd < billStart) billEnd = billStart
+
+    const from = Math.max(billStart, rangeStart)
+    const to = Math.min(billEnd, rangeEnd)
+    if (to < from) continue
+
+    const ratio = (to - from + 1) / (billEnd - billStart + 1)
+    const amount = (Number(bill.amount) || 0) * ratio
+    total += amount
+    totalConsumption += (Number(bill.consumption_value) || 0) * ratio
+    count++
+
+    const key = bill.category_id ?? 'senza-categoria'
+    amountByCategory.set(key, (amountByCategory.get(key) ?? 0) + amount)
+    const list = intervalsByCategory.get(key) ?? []
+    list.push([from, to])
+    intervalsByCategory.set(key, list)
+  }
+
+  let monthlyAverage = 0
+  for (const [key, intervals] of intervalsByCategory) {
+    const days = unionLength(intervals)
+    if (days > 0) monthlyAverage += ((amountByCategory.get(key) ?? 0) / days) * DAYS_PER_MONTH
+  }
+
+  return { total, monthlyAverage, count, totalConsumption }
 }
 
 export function filterByCategory(bills: Bill[], categoryName: string, categories: Category[]): Bill[] {
@@ -185,4 +268,47 @@ export function availableYears(bills: Bill[]): number[] {
   const years = Array.from(set).sort((a, b) => b - a)
   if (years.length === 0) years.push(new Date().getFullYear())
   return years
+}
+
+/** Etichetta breve del periodo di una bolletta, es. "Ago–Set 2026" oppure "Set 2026". */
+export function billPeriodLabel(bill: Bill): string {
+  const [sy, sm] = bill.billing_start.slice(0, 10).split('-').map(Number)
+  const [ey, em] = bill.billing_end.slice(0, 10).split('-').map(Number)
+  if (!sy || !sm || !ey || !em) return ''
+  const s = MONTHS_IT[sm - 1]
+  const e = MONTHS_IT[em - 1]
+  if (sy === ey && sm === em) return `${s} ${sy}`
+  if (sy === ey) return `${s}–${e} ${sy}`
+  return `${s} ${sy}–${e} ${ey}`
+}
+
+export interface LastBillInfo {
+  bill: Bill
+  previous: Bill | null
+  /** Variazione del costo giornaliero rispetto alla bolletta precedente della stessa categoria. */
+  variationPct: number | null
+}
+
+function costPerDay(bill: Bill): number {
+  const start = dayIndex(bill.billing_start)
+  let end = dayIndex(bill.billing_end)
+  if (isNaN(start)) return 0
+  if (isNaN(end) || end < start) end = start
+  return (Number(bill.amount) || 0) / (end - start + 1)
+}
+
+/**
+ * Ultima bolletta ricevuta di una categoria (quella con il periodo più recente) e confronto con la precedente.
+ * Il confronto usa il costo al giorno, così bollette di durata diversa (1 mese vs 2 mesi) restano confrontabili.
+ */
+export function lastBillInfo(bills: Bill[], categoryId: string): LastBillInfo | null {
+  const list = bills
+    .filter((b) => b.category_id === categoryId)
+    .sort((a, b) => b.billing_end.localeCompare(a.billing_end) || b.billing_start.localeCompare(a.billing_start))
+  if (list.length === 0) return null
+  const bill = list[0]
+  const previous = list[1] ?? null
+  const prevDaily = previous ? costPerDay(previous) : 0
+  const variationPct = previous && prevDaily > 0 ? ((costPerDay(bill) - prevDaily) / prevDaily) * 100 : null
+  return { bill, previous, variationPct }
 }
