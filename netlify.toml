@@ -1,0 +1,12 @@
+[build]
+  command = "npm run build"
+  publish = "dist"
+
+[functions]
+  directory = "netlify/functions"
+
+# Necessario per le SPA: ricaricando /dashboard, /bills ecc. serve sempre index.html
+[[redirects]]
+  from = "/*"
+  to = "/index.html"
+  status = 200
