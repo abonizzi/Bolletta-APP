@@ -5,7 +5,7 @@ import { UNIT_LABELS } from '@/types'
 import { extractBillFromFile } from '@/services/extraction'
 import { EbittsDraftList, draftsFromItems, validateDrafts, type Draft, type NewEarning } from '@/components/EbittsDrafts'
 
-const UNITS: ConsumptionUnit[] = ['kWh', 'm3', 'L', 'EUR', 'ore', 'pezzi', 'none']
+const UNITS: ConsumptionUnit[] = ['kWh', 'm3', 'Smc', 'L', 'EUR', 'ore', 'pezzi', 'none']
 
 function toInputDate(d?: string | null) {
   if (!d) return ''

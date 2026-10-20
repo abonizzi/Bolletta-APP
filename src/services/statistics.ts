@@ -1,4 +1,4 @@
-import type { Bill, Category } from '@/types'
+import type { Bill, Category, ConsumptionUnit } from '@/types'
 
 const MONTHS_IT = ['Gen', 'Feb', 'Mar', 'Apr', 'Mag', 'Giu', 'Lug', 'Ago', 'Set', 'Ott', 'Nov', 'Dic']
 const MS_PER_DAY = 24 * 60 * 60 * 1000
@@ -153,13 +153,14 @@ export interface PeriodSummary {
   monthlyAverage: number
   /** Bollette il cui periodo di fatturazione tocca l'intervallo. */
   count: number
-  totalConsumption: number
+  /** Consumo che ricade nel periodo, per categoria (ogni categoria con la sua unità: kWh, Smc, m³...). */
+  consumptionByCategory: Record<string, { value: number; unit: ConsumptionUnit | null }>
 }
 
 const DAYS_PER_MONTH = 365.25 / 12
 
 /** Numero progressivo del giorno, da 'YYYY-MM-DD' o Date, senza problemi di fuso orario. */
-function dayIndex(d: string | Date): number {
+export function dayIndex(d: string | Date): number {
   if (typeof d === 'string') {
     const m = /^(\d{4})-(\d{2})-(\d{2})/.exec(d)
     if (m) return Math.floor(Date.UTC(Number(m[1]), Number(m[2]) - 1, Number(m[3])) / MS_PER_DAY)
@@ -170,7 +171,7 @@ function dayIndex(d: string | Date): number {
 }
 
 /** Giorni totali coperti da un insieme di intervalli, senza contare due volte le sovrapposizioni. */
-function unionLength(intervals: Array<[number, number]>): number {
+export function unionLength(intervals: Array<[number, number]>): number {
   const sorted = [...intervals].sort((a, b) => a[0] - b[0])
   let total = 0
   let curStart = NaN
@@ -202,7 +203,7 @@ export function summarizeRange(bills: Bill[], start: Date, end: Date): PeriodSum
   const rangeStart = dayIndex(start)
   const rangeEnd = dayIndex(end)
   let total = 0
-  let totalConsumption = 0
+  const consumptionByCategory: PeriodSummary['consumptionByCategory'] = {}
   let count = 0
   const amountByCategory = new Map<string, number>()
   const intervalsByCategory = new Map<string, Array<[number, number]>>()
@@ -220,10 +221,15 @@ export function summarizeRange(bills: Bill[], start: Date, end: Date): PeriodSum
     const ratio = (to - from + 1) / (billEnd - billStart + 1)
     const amount = (Number(bill.amount) || 0) * ratio
     total += amount
-    totalConsumption += (Number(bill.consumption_value) || 0) * ratio
     count++
 
     const key = bill.category_id ?? 'senza-categoria'
+    if (bill.consumption_value != null) {
+      const entry = consumptionByCategory[key] ?? { value: 0, unit: null }
+      entry.value += (Number(bill.consumption_value) || 0) * ratio
+      if (!entry.unit && bill.consumption_unit && bill.consumption_unit !== 'none') entry.unit = bill.consumption_unit
+      consumptionByCategory[key] = entry
+    }
     amountByCategory.set(key, (amountByCategory.get(key) ?? 0) + amount)
     const list = intervalsByCategory.get(key) ?? []
     list.push([from, to])
@@ -236,7 +242,7 @@ export function summarizeRange(bills: Bill[], start: Date, end: Date): PeriodSum
     if (days > 0) monthlyAverage += ((amountByCategory.get(key) ?? 0) / days) * DAYS_PER_MONTH
   }
 
-  return { total, monthlyAverage, count, totalConsumption }
+  return { total, monthlyAverage, count, consumptionByCategory }
 }
 
 export function filterByCategory(bills: Bill[], categoryName: string, categories: Category[]): Bill[] {

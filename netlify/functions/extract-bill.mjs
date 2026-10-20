@@ -5,7 +5,7 @@
 
 const ALLOWED_MIME = new Set(['application/pdf', 'image/jpeg', 'image/png', 'image/webp'])
 const MAX_BASE64_CHARS = 5_600_000 // ~4 MB di file (Netlify limita il corpo della richiesta a ~6 MB)
-const UNITS = new Set(['kWh', 'm3', 'L', 'ore', 'pezzi', 'none'])
+const UNITS = new Set(['kWh', 'm3', 'Smc', 'L', 'ore', 'pezzi', 'none'])
 
 function buildPrompt(categoryNames) {
   const list = categoryNames.length
@@ -21,9 +21,9 @@ PARTE 1 - DATI DELLA BOLLETTA (campo "bill")
   Se ci sono più periodi (letture o tariffe diverse) usa l'inizio del primo e la fine dell'ultimo.
 - amount: TOTALE DA PAGARE della bolletta in euro (IVA e imposte incluse), numero con il punto decimale.
   Non usare totali parziali, subtotali, acconti o importi di bollette precedenti.
-- consumption_value: consumo FATTURATO nel periodo, numero. Luce: kWh totali. Gas: Smc (standard metri cubi). Acqua: metri cubi.
+- consumption_value: consumo FATTURATO nel periodo, numero. Luce: kWh totali. Gas: Smc (standard metri cubi, NON i kWh). Acqua: metri cubi.
   Non usare consumi annui, storici o di periodi precedenti. Se i consumi sono stimati e non letti, segnalalo in "notes".
-- consumption_unit: una tra "kWh", "m3", "L", "ore", "pezzi", "none". Gas e acqua: "m3". Luce: "kWh".
+- consumption_unit: una tra "kWh", "m3", "Smc", "L", "ore", "pezzi", "none". Luce: "kWh". Gas: "Smc" (come scritto in bolletta). Acqua: "m3".
   Se la bolletta non ha un consumo (es. internet, rifiuti) usa consumption_value=null e consumption_unit="none".
 - due_date: data di scadenza del pagamento, formato YYYY-MM-DD.
 
@@ -51,7 +51,7 @@ Rispondi ESCLUSIVAMENTE con un JSON di questa forma, senza altro testo:
     "billing_end": "YYYY-MM-DD" | null,
     "amount": number | null,
     "consumption_value": number | null,
-    "consumption_unit": "kWh" | "m3" | "L" | "ore" | "pezzi" | "none" | null,
+    "consumption_unit": "kWh" | "m3" | "Smc" | "L" | "ore" | "pezzi" | "none" | null,
     "due_date": "YYYY-MM-DD" | null
   },
   "ebitts": {
@@ -89,7 +89,8 @@ function toUnit(v) {
   if (UNITS.has(v)) return v
   const k = v.trim().toLowerCase().replace(/[³]/g, '3')
   if (['kwh'].includes(k)) return 'kWh'
-  if (['m3', 'mc', 'smc', 'sm3', 'metri cubi', 'standard metri cubi'].includes(k)) return 'm3'
+  if (['smc', 'sm3', 'standard metri cubi', 'standard m3'].includes(k)) return 'Smc'
+  if (['m3', 'mc', 'metri cubi'].includes(k)) return 'm3'
   if (['l', 'lt', 'litri'].includes(k)) return 'L'
   if (['ore', 'h'].includes(k)) return 'ore'
   if (['pezzi', 'pz'].includes(k)) return 'pezzi'

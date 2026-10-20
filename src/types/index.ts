@@ -1,7 +1,7 @@
 export type ThemeMode = 'light' | 'dark' | 'auto'
 export type LayoutMode = 'auto' | 'desktop' | 'mobile'
 export type SyncStatus = 'synced' | 'syncing' | 'error' | 'offline'
-export type ConsumptionUnit = 'kWh' | 'm3' | 'L' | 'EUR' | 'ore' | 'pezzi' | 'none'
+export type ConsumptionUnit = 'kWh' | 'm3' | 'Smc' | 'L' | 'EUR' | 'ore' | 'pezzi' | 'none'
 
 export interface Profile {
   id: string
@@ -80,7 +80,7 @@ export const DEFAULT_CATEGORIES: Array<
   Pick<Category, 'name' | 'icon' | 'color' | 'consumption_unit' | 'include_in_charts' | 'supplier_name' | 'contract_code' | 'contract_expiry'>
 > = [
   { name: 'Luce', icon: '⚡', color: '#f59e0b', consumption_unit: 'kWh', include_in_charts: true, supplier_name: null, contract_code: null, contract_expiry: null },
-  { name: 'Gas', icon: '🔥', color: '#ef4444', consumption_unit: 'm3', include_in_charts: true, supplier_name: null, contract_code: null, contract_expiry: null },
+  { name: 'Gas', icon: '🔥', color: '#ef4444', consumption_unit: 'Smc', include_in_charts: true, supplier_name: null, contract_code: null, contract_expiry: null },
   { name: 'Acqua', icon: '💧', color: '#3b82f6', consumption_unit: 'm3', include_in_charts: true, supplier_name: null, contract_code: null, contract_expiry: null },
   { name: 'Rifiuti', icon: '🗑️', color: '#10b981', consumption_unit: 'none', include_in_charts: true, supplier_name: null, contract_code: null, contract_expiry: null },
   { name: 'Condominio', icon: '🏠', color: '#8b5cf6', consumption_unit: 'none', include_in_charts: true, supplier_name: null, contract_code: null, contract_expiry: null },
@@ -90,6 +90,7 @@ export const DEFAULT_CATEGORIES: Array<
 export const UNIT_LABELS: Record<ConsumptionUnit, string> = {
   kWh: 'kWh',
   m3: 'm³',
+  Smc: 'Smc',
   L: 'L',
   EUR: '€',
   ore: 'ore',

@@ -112,3 +112,10 @@ Resta sempre disponibile l'inserimento manuale dei guadagni.
 ## 9. Controllo dei tipi
 
 `npm run build` compila senza bloccarsi sui controlli di tipo; per un controllo completo del codice usa `npm run typecheck`.
+
+## 10. Unità "Smc" per il gas
+
+Il gas si legge in bolletta in **Smc** (standard metri cubi): è un'unità a sé, distinta dai m³ dell'acqua.
+Se il database esisteva già, esegui una volta `supabase-migration-smc.sql` in Supabase → SQL Editor **prima** di
+pubblicare la nuova versione: ammette il valore "Smc" e converte il gas già inserito. Nelle installazioni nuove
+è già incluso in `supabase-schema.sql`.

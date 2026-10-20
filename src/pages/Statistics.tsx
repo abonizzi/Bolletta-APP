@@ -3,6 +3,7 @@ import { AppLayout } from '@/components/layout/AppLayout'
 import { CategoryExpenseChart } from '@/components/CategoryExpenseChart'
 import { ConsumptionChart } from '@/components/ConsumptionChart'
 import { useData } from '@/hooks/useData'
+import { UNIT_LABELS } from '@/types'
 import { summarizeRange, buildSeriesForRange } from '@/services/statistics'
 
 type FilterKey = '3m' | '6m' | '12m' | 'current_year' | 'previous_year' | 'custom'
@@ -51,6 +52,15 @@ export function Statistics() {
   const summary = useMemo(() => summarizeRange(bills, start, end), [bills, start.getTime(), end.getTime()])
   const series = useMemo(() => buildSeriesForRange(bills, categories, start, end), [bills, categories, start.getTime(), end.getTime()])
 
+  // consumi divisi per categoria, ciascuno con la sua unità (kWh, Smc, m³...)
+  const consumptionRows = categories
+    .map((c) => {
+      const entry = summary.consumptionByCategory[c.id]
+      const unit = c.consumption_unit !== 'none' ? c.consumption_unit : entry?.unit ?? 'none'
+      return { id: c.id, name: c.name, icon: c.icon, color: c.color, value: entry?.value ?? 0, unit, unitLabel: UNIT_LABELS[unit] }
+    })
+    .filter((r) => r.unit !== 'none')
+
   const consumptionCategories = categories.filter((c) => c.include_in_charts && c.consumption_unit !== 'none')
 
   return (
@@ -80,11 +90,34 @@ export function Statistics() {
         <p className="text-sm text-slate-400">Caricamento statistiche...</p>
       ) : (
         <>
-          <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mb-6">
+          <div className="grid grid-cols-2 md:grid-cols-3 gap-3 mb-4">
             <Stat label="Totale speso" value={summary.total.toLocaleString('it-IT', { style: 'currency', currency: 'EUR' })} />
             <Stat label="Media mensile" value={summary.monthlyAverage.toLocaleString('it-IT', { style: 'currency', currency: 'EUR' })} />
-            <Stat label="Numero bollette" value={summary.count.toString()} />
-            <Stat label="Consumo totale" value={summary.totalConsumption.toLocaleString('it-IT')} />
+            <Stat label="Numero bollette" value={summary.count.toString()} className="col-span-2 md:col-span-1" />
+          </div>
+
+          <div className="bg-white dark:bg-slate-900 rounded-2xl shadow-card p-4 mb-6">
+            <p className="font-semibold text-slate-900 dark:text-white mb-3">Consumi nel periodo</p>
+            {consumptionRows.length === 0 ? (
+              <p className="text-sm text-slate-400">Nessuna categoria con unità di consumo.</p>
+            ) : (
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                {consumptionRows.map((r) => (
+                  <div key={r.id} className="flex items-center gap-3 rounded-xl bg-slate-50 dark:bg-slate-800/60 p-3">
+                    <span className="h-9 w-9 rounded-lg flex items-center justify-center shrink-0" style={{ backgroundColor: `${r.color}20` }}>
+                      {r.icon}
+                    </span>
+                    <div className="min-w-0">
+                      <p className="text-xs text-slate-500 dark:text-slate-400">{r.name}</p>
+                      <p className="text-base font-semibold text-slate-900 dark:text-white">
+                        {r.value > 0 ? r.value.toLocaleString('it-IT', { maximumFractionDigits: 1 }) : '—'}{' '}
+                        <span className="text-sm font-normal text-slate-400">{r.unitLabel}</span>
+                      </p>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
           </div>
 
           <div className="mb-4">
@@ -109,9 +142,9 @@ export function Statistics() {
   )
 }
 
-function Stat({ label, value }: { label: string; value: string }) {
+function Stat({ label, value, className = '' }: { label: string; value: string; className?: string }) {
   return (
-    <div className="bg-white dark:bg-slate-900 rounded-2xl shadow-card p-4">
+    <div className={`bg-white dark:bg-slate-900 rounded-2xl shadow-card p-4 ${className}`}>
       <p className="text-xs text-slate-500 dark:text-slate-400">{label}</p>
       <p className="text-lg font-semibold text-slate-900 dark:text-white">{value}</p>
     </div>

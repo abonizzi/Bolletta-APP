@@ -27,7 +27,7 @@ create table if not exists public.categories (
   icon text not null default '🏷️',
   color text not null default '#3b82f6',
   consumption_unit text not null default 'none'
-    check (consumption_unit in ('kWh','m3','L','EUR','ore','pezzi','none')),
+    check (consumption_unit in ('kWh','m3','Smc','L','EUR','ore','pezzi','none')),
   include_in_charts boolean not null default true,
   supplier_name text,
   contract_code text,
@@ -44,7 +44,7 @@ create table if not exists public.bills (
   billing_end date not null,
   consumption_value numeric,
   consumption_unit text
-    check (consumption_unit in ('kWh','m3','L','EUR','ore','pezzi','none')),
+    check (consumption_unit in ('kWh','m3','Smc','L','EUR','ore','pezzi','none')),
   amount numeric not null check (amount >= 0),
   due_date date,
   notes text,

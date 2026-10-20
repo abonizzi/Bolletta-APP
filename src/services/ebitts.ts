@@ -1,6 +1,6 @@
 import type { EbittsEarning, TokenBox } from '@/types'
 import { extractBillFromFile, type ExtractedEbittsItem } from '@/services/extraction'
-import { splitPeriodByMonth, monthLabel } from '@/services/statistics'
+import { splitPeriodByMonth, monthLabel, dayIndex, unionLength } from '@/services/statistics'
 
 const MS_PER_DAY = 24 * 60 * 60 * 1000
 const DAYS_PER_YEAR = 365
@@ -47,10 +47,6 @@ export interface EbittsProspect {
   purchases: PurchaseProjection[]
 }
 
-function dayDiffInclusive(a: Date, b: Date): number {
-  return Math.round((b.getTime() - a.getTime()) / MS_PER_DAY) + 1
-}
-
 function addYears(d: Date, years: number): Date {
   const r = new Date(d.getTime())
   r.setFullYear(r.getFullYear() + years)
@@ -64,33 +60,37 @@ export function computeProspect(boxes: TokenBox[], earnings: EbittsEarning[], to
   const earnedFromApp = earnings.reduce((s, e) => s + (Number(e.amount) || 0), 0)
   const earnedToDate = earnedFromApp + priorEarnings
 
-  // --- finestra degli ultimi 365 giorni di dati, ripartita linearmente per giorno ---
+  // --- finestra degli ultimi 365 giorni di dati ---
+  // Gli importi si sommano; i giorni coperti si contano UNA SOLA VOLTA anche se più voci
+  // (es. "compensazione" e "valorizzazione eccedenze") si riferiscono allo stesso periodo.
   let basisAmount = 0
   let basisDays = 0
   let basisFrom: string | null = null
   let basisTo: string | null = null
 
-  const valid = earnings.filter((e) => !isNaN(new Date(e.period_start).getTime()) && !isNaN(new Date(e.period_end).getTime()))
+  const valid = earnings.filter((e) => !isNaN(dayIndex(e.period_start)) && !isNaN(dayIndex(e.period_end)))
   if (valid.length > 0) {
-    const latestEnd = new Date(Math.max(...valid.map((e) => new Date(e.period_end).getTime())))
-    const windowStart = new Date(latestEnd.getTime() - (DAYS_PER_YEAR - 1) * MS_PER_DAY)
-    let earliestUsed: Date | null = null
+    const latestEnd = Math.max(...valid.map((e) => dayIndex(e.period_end)))
+    const windowStart = latestEnd - (DAYS_PER_YEAR - 1)
+    const intervals: Array<[number, number]> = []
 
     for (const e of valid) {
-      const s = new Date(e.period_start)
-      const en = new Date(e.period_end)
-      const totalDays = dayDiffInclusive(s, en)
-      if (totalDays <= 0) continue
-      const overlapStart = s > windowStart ? s : windowStart
-      const overlapEnd = en < latestEnd ? en : latestEnd
-      const days = dayDiffInclusive(overlapStart, overlapEnd)
-      if (days <= 0) continue
-      basisAmount += (Number(e.amount) || 0) * (days / totalDays)
-      basisDays += days
-      if (!earliestUsed || overlapStart < earliestUsed) earliestUsed = overlapStart
+      const s = dayIndex(e.period_start)
+      const en = dayIndex(e.period_end)
+      if (en < s) continue
+      const from = Math.max(s, windowStart)
+      const to = Math.min(en, latestEnd)
+      if (to < from) continue
+      basisAmount += (Number(e.amount) || 0) * ((to - from + 1) / (en - s + 1))
+      intervals.push([from, to])
     }
-    basisFrom = earliestUsed ? earliestUsed.toISOString().slice(0, 10) : null
-    basisTo = latestEnd.toISOString().slice(0, 10)
+
+    if (intervals.length > 0) {
+      basisDays = unionLength(intervals)
+      const toIso = (idx: number) => new Date(idx * MS_PER_DAY).toISOString().slice(0, 10)
+      basisFrom = toIso(Math.min(...intervals.map((i) => i[0])))
+      basisTo = toIso(latestEnd)
+    }
   }
 
   const annualEarnings = basisDays > 0 ? (basisAmount / basisDays) * DAYS_PER_YEAR : null

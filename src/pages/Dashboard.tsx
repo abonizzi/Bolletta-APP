@@ -17,6 +17,8 @@ function greeting() {
   return 'Buonasera'
 }
 
+const MAIN_UTILITIES = ['luce', 'gas', 'acqua']
+
 export function Dashboard() {
   const { bills, categories, loading } = useData()
   const { user } = useAuth()
@@ -32,14 +34,26 @@ export function Dashboard() {
   const yearlySeries = useMemo(() => buildYearlySeries(bills, categories, effectiveYear), [bills, categories, effectiveYear])
 
   // Le bollette arrivano a posteriori: invece del "mese in corso" (quasi sempre vuoto)
-  // mostriamo l'ultima bolletta ricevuta per categoria e la media degli ultimi 12 mesi.
+  // mostriamo l'ultima bolletta ricevuta delle utenze principali (luce, gas, acqua)
+  // e la media degli ultimi 12 mesi.
   const lastBills = useMemo(() => {
-    return categories
-      .filter((c) => c.include_in_charts)
-      .map((category) => ({ category, info: lastBillInfo(bills, category.id) }))
-      .filter((x): x is { category: (typeof categories)[number]; info: NonNullable<ReturnType<typeof lastBillInfo>> } => x.info !== null)
-      .sort((a, b) => b.info.bill.billing_end.localeCompare(a.info.bill.billing_end))
-      .slice(0, 3)
+    type Entry = { category: (typeof categories)[number]; info: NonNullable<ReturnType<typeof lastBillInfo>> }
+    const withBills: Entry[] = []
+    for (const category of categories.filter((c) => c.include_in_charts)) {
+      const info = lastBillInfo(bills, category.id)
+      if (info) withBills.push({ category, info })
+    }
+
+    // utenze principali, sempre nello stesso ordine
+    const main: Entry[] = []
+    for (const name of MAIN_UTILITIES) {
+      const found = withBills.find((x) => x.category.name.trim().toLowerCase() === name)
+      if (found) main.push(found)
+    }
+    if (main.length > 0) return main
+
+    // se le categorie sono state rinominate, ripiego sulle 3 con la bolletta più recente
+    return [...withBills].sort((a, b) => b.info.bill.billing_end.localeCompare(a.info.bill.billing_end)).slice(0, 3)
   }, [bills, categories])
 
   const average12 = useMemo(() => {

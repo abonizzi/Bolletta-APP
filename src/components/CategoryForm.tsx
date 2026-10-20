@@ -2,7 +2,7 @@ import { useState } from 'react'
 import type { Category, ConsumptionUnit } from '@/types'
 import { UNIT_LABELS } from '@/types'
 
-const UNITS: ConsumptionUnit[] = ['kWh', 'm3', 'L', 'EUR', 'ore', 'pezzi', 'none']
+const UNITS: ConsumptionUnit[] = ['kWh', 'm3', 'Smc', 'L', 'EUR', 'ore', 'pezzi', 'none']
 const ICONS = ['⚡', '🔥', '💧', '🗑️', '🏠', '📶', '🌐', '📱', '🚗', '🛒', '🏥', '🎓', '🐾']
 const COLORS = ['#f59e0b', '#ef4444', '#3b82f6', '#10b981', '#8b5cf6', '#06b6d4', '#ec4899', '#64748b']
 
