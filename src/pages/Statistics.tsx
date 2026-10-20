@@ -52,12 +52,26 @@ export function Statistics() {
   const summary = useMemo(() => summarizeRange(bills, start, end), [bills, start.getTime(), end.getTime()])
   const series = useMemo(() => buildSeriesForRange(bills, categories, start, end), [bills, categories, start.getTime(), end.getTime()])
 
-  // consumi divisi per categoria, ciascuno con la sua unità (kWh, Smc, m³...)
+  // media mensile di spesa, per categoria (solo categorie con bollette nel periodo)
+  const monthlyRows = categories
+    .map((c) => ({ id: c.id, name: c.name, icon: c.icon, color: c.color, average: summary.byCategory[c.id]?.monthlyAverage ?? 0, has: Boolean(summary.byCategory[c.id]) }))
+    .filter((r) => r.has)
+
+  // consumi divisi per categoria, ciascuno con la sua unità (kWh, Smc, m³...) e la media di un mese
   const consumptionRows = categories
     .map((c) => {
-      const entry = summary.consumptionByCategory[c.id]
+      const entry = summary.byCategory[c.id]
       const unit = c.consumption_unit !== 'none' ? c.consumption_unit : entry?.unit ?? 'none'
-      return { id: c.id, name: c.name, icon: c.icon, color: c.color, value: entry?.value ?? 0, unit, unitLabel: UNIT_LABELS[unit] }
+      return {
+        id: c.id,
+        name: c.name,
+        icon: c.icon,
+        color: c.color,
+        value: entry?.consumption ?? 0,
+        monthly: entry?.monthlyConsumption ?? null,
+        unit,
+        unitLabel: UNIT_LABELS[unit]
+      }
     })
     .filter((r) => r.unit !== 'none')
 
@@ -96,6 +110,33 @@ export function Statistics() {
             <Stat label="Numero bollette" value={summary.count.toString()} className="col-span-2 md:col-span-1" />
           </div>
 
+          <div className="bg-white dark:bg-slate-900 rounded-2xl shadow-card p-4 mb-4">
+            <p className="font-semibold text-slate-900 dark:text-white mb-3">Media mensile per categoria</p>
+            {monthlyRows.length === 0 ? (
+              <p className="text-sm text-slate-400">Nessuna bolletta nel periodo selezionato.</p>
+            ) : (
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                {monthlyRows.map((r) => (
+                  <div key={r.id} className="flex items-center gap-3 rounded-xl bg-slate-50 dark:bg-slate-800/60 p-3">
+                    <span className="h-9 w-9 rounded-lg flex items-center justify-center shrink-0" style={{ backgroundColor: `${r.color}20` }}>
+                      {r.icon}
+                    </span>
+                    <div className="min-w-0">
+                      <p className="text-xs text-slate-500 dark:text-slate-400">{r.name}</p>
+                      <p className="text-base font-semibold text-slate-900 dark:text-white">
+                        {r.average.toLocaleString('it-IT', { style: 'currency', currency: 'EUR' })}{' '}
+                        <span className="text-sm font-normal text-slate-400">/ mese</span>
+                      </p>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+            <p className="text-[11px] text-slate-400 mt-3">
+              Calcolata sui giorni coperti dalle bollette di ciascuna categoria, non sui mesi del periodo. La somma è la "Media mensile" in alto.
+            </p>
+          </div>
+
           <div className="bg-white dark:bg-slate-900 rounded-2xl shadow-card p-4 mb-6">
             <p className="font-semibold text-slate-900 dark:text-white mb-3">Consumi nel periodo</p>
             {consumptionRows.length === 0 ? (
@@ -113,6 +154,11 @@ export function Statistics() {
                         {r.value > 0 ? r.value.toLocaleString('it-IT', { maximumFractionDigits: 1 }) : '—'}{' '}
                         <span className="text-sm font-normal text-slate-400">{r.unitLabel}</span>
                       </p>
+                      {r.monthly != null && (
+                        <p className="text-[11px] text-slate-400">
+                          ≈ {r.monthly.toLocaleString('it-IT', { maximumFractionDigits: 1 })} {r.unitLabel} / mese
+                        </p>
+                      )}
                     </div>
                   </div>
                 ))}

@@ -146,15 +146,28 @@ export function buildYearlySeries(bills: Bill[], categories: Category[], year: n
   return points
 }
 
+export interface CategorySummary {
+  /** Spesa della categoria che ricade nel periodo. */
+  amount: number
+  /** Spesa media di un mese, calcolata sui giorni coperti dalle bollette della categoria. */
+  monthlyAverage: number
+  /** Consumo nel periodo (null se le bollette non riportano un consumo). */
+  consumption: number | null
+  /** Consumo medio di un mese, calcolato sui giorni coperti dalle bollette con consumo. */
+  monthlyConsumption: number | null
+  /** Unità del consumo letta dalle bollette (kWh, Smc, m³...). */
+  unit: ConsumptionUnit | null
+}
+
 export interface PeriodSummary {
   /** Spesa che ricade nel periodo (bollette ripartite per giorno). */
   total: number
-  /** Spesa media di un mese, calcolata sui giorni effettivamente coperti dalle bollette. */
+  /** Spesa media di un mese: somma delle medie mensili delle singole categorie. */
   monthlyAverage: number
   /** Bollette il cui periodo di fatturazione tocca l'intervallo. */
   count: number
-  /** Consumo che ricade nel periodo, per categoria (ogni categoria con la sua unità: kWh, Smc, m³...). */
-  consumptionByCategory: Record<string, { value: number; unit: ConsumptionUnit | null }>
+  /** Dettaglio per categoria (chiave = id categoria). */
+  byCategory: Record<string, CategorySummary>
 }
 
 const DAYS_PER_MONTH = 365.25 / 12
@@ -203,10 +216,17 @@ export function summarizeRange(bills: Bill[], start: Date, end: Date): PeriodSum
   const rangeStart = dayIndex(start)
   const rangeEnd = dayIndex(end)
   let total = 0
-  const consumptionByCategory: PeriodSummary['consumptionByCategory'] = {}
   let count = 0
-  const amountByCategory = new Map<string, number>()
-  const intervalsByCategory = new Map<string, Array<[number, number]>>()
+
+  type Acc = {
+    amount: number
+    intervals: Array<[number, number]>
+    consumption: number
+    consumptionIntervals: Array<[number, number]>
+    hasConsumption: boolean
+    unit: ConsumptionUnit | null
+  }
+  const acc = new Map<string, Acc>()
 
   for (const bill of bills) {
     const billStart = dayIndex(bill.billing_start)
@@ -224,25 +244,35 @@ export function summarizeRange(bills: Bill[], start: Date, end: Date): PeriodSum
     count++
 
     const key = bill.category_id ?? 'senza-categoria'
+    const entry: Acc = acc.get(key) ?? { amount: 0, intervals: [], consumption: 0, consumptionIntervals: [], hasConsumption: false, unit: null }
+    entry.amount += amount
+    entry.intervals.push([from, to])
     if (bill.consumption_value != null) {
-      const entry = consumptionByCategory[key] ?? { value: 0, unit: null }
-      entry.value += (Number(bill.consumption_value) || 0) * ratio
+      entry.consumption += (Number(bill.consumption_value) || 0) * ratio
+      entry.consumptionIntervals.push([from, to])
+      entry.hasConsumption = true
       if (!entry.unit && bill.consumption_unit && bill.consumption_unit !== 'none') entry.unit = bill.consumption_unit
-      consumptionByCategory[key] = entry
     }
-    amountByCategory.set(key, (amountByCategory.get(key) ?? 0) + amount)
-    const list = intervalsByCategory.get(key) ?? []
-    list.push([from, to])
-    intervalsByCategory.set(key, list)
+    acc.set(key, entry)
   }
 
+  const byCategory: Record<string, CategorySummary> = {}
   let monthlyAverage = 0
-  for (const [key, intervals] of intervalsByCategory) {
-    const days = unionLength(intervals)
-    if (days > 0) monthlyAverage += ((amountByCategory.get(key) ?? 0) / days) * DAYS_PER_MONTH
+  for (const [key, e] of acc) {
+    const days = unionLength(e.intervals)
+    const catAverage = days > 0 ? (e.amount / days) * DAYS_PER_MONTH : 0
+    const consumptionDays = unionLength(e.consumptionIntervals)
+    byCategory[key] = {
+      amount: e.amount,
+      monthlyAverage: catAverage,
+      consumption: e.hasConsumption ? e.consumption : null,
+      monthlyConsumption: e.hasConsumption && consumptionDays > 0 ? (e.consumption / consumptionDays) * DAYS_PER_MONTH : null,
+      unit: e.unit
+    }
+    monthlyAverage += catAverage
   }
 
-  return { total, monthlyAverage, count, consumptionByCategory }
+  return { total, monthlyAverage, count, byCategory }
 }
 
 export function filterByCategory(bills: Bill[], categoryName: string, categories: Category[]): Bill[] {
