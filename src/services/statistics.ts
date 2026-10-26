@@ -348,3 +348,18 @@ export function lastBillInfo(bills: Bill[], categoryId: string): LastBillInfo | 
   const variationPct = previous && prevDaily > 0 ? ((costPerDay(bill) - prevDaily) / prevDaily) * 100 : null
   return { bill, previous, variationPct }
 }
+
+/**
+ * Quota (da 0 a 1) di un periodo di fatturazione che cade dentro un intervallo di date,
+ * calcolata in giorni. Restituisce null se il periodo non tocca l'intervallo.
+ */
+export function periodShareInRange(startStr: string, endStr: string, rangeStart: Date, rangeEnd: Date): number | null {
+  const s = dayIndex(startStr)
+  if (isNaN(s)) return null
+  let e = dayIndex(endStr)
+  if (isNaN(e) || e < s) e = s
+  const from = Math.max(s, dayIndex(rangeStart))
+  const to = Math.min(e, dayIndex(rangeEnd))
+  if (to < from) return null
+  return (to - from + 1) / (e - s + 1)
+}

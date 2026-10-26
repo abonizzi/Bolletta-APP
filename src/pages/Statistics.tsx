@@ -1,5 +1,7 @@
 import { useMemo, useState } from 'react'
 import { AppLayout } from '@/components/layout/AppLayout'
+import { FileDown } from 'lucide-react'
+import { ExportReportModal } from '@/components/ExportReportModal'
 import { CategoryExpenseChart } from '@/components/CategoryExpenseChart'
 import { ConsumptionChart } from '@/components/ConsumptionChart'
 import { useData } from '@/hooks/useData'
@@ -42,6 +44,7 @@ function rangeForFilter(filter: FilterKey, customStart: string, customEnd: strin
 
 export function Statistics() {
   const { bills, categories, loading } = useData()
+  const [exportOpen, setExportOpen] = useState(false)
   const [filter, setFilter] = useState<FilterKey>('6m')
   const [customStart, setCustomStart] = useState('')
   const [customEnd, setCustomEnd] = useState('')
@@ -79,6 +82,16 @@ export function Statistics() {
 
   return (
     <AppLayout title="Statistiche" subtitle="Analizza le tue spese nel tempo">
+      <div className="flex justify-end mb-3">
+        <button
+          type="button"
+          onClick={() => setExportOpen(true)}
+          className="inline-flex items-center gap-2 px-3.5 py-2 rounded-xl text-sm font-medium bg-white dark:bg-slate-900 text-slate-700 dark:text-slate-200 shadow-card"
+        >
+          <FileDown size={16} /> Esporta PDF
+        </button>
+      </div>
+
       <div className="flex gap-2 overflow-x-auto pb-1 mb-4 -mx-4 px-4 md:mx-0 md:px-0">
         {FILTERS.map((f) => (
           <button
@@ -184,6 +197,7 @@ export function Statistics() {
           </div>
         </>
       )}
+      {exportOpen && <ExportReportModal onClose={() => setExportOpen(false)} bills={bills} categories={categories} />}
     </AppLayout>
   )
 }

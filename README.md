@@ -119,3 +119,17 @@ Il gas si legge in bolletta in **Smc** (standard metri cubi): è un'unità a sé
 Se il database esisteva già, esegui una volta `supabase-migration-smc.sql` in Supabase → SQL Editor **prima** di
 pubblicare la nuova versione: ammette il valore "Smc" e converte il gas già inserito. Nelle installazioni nuove
 è già incluso in `supabase-schema.sql`.
+
+## 11. Esportazione del resoconto in PDF
+
+In **Statistiche → Esporta PDF** scegli un **mese**, un **anno** o un **periodo personalizzato** e scarichi un PDF con:
+
+- riepilogo del periodo (totale speso, media mensile, numero di bollette);
+- spesa mese per mese (grafico e tabella per categoria) quando il periodo supera un mese;
+- dettaglio per categoria con spesa, media mensile, consumi (kWh, Smc, m³...) e consumo medio al mese;
+- elenco completo delle bollette con periodo di fatturazione, consumo, importo, **quota che cade nel periodo**, scadenza e note;
+- sezione Ebitts (Token Box, guadagni del periodo, prospetto di rientro), se la usi.
+
+Il PDF viene creato **nel browser** con la libreria `pdf-lib`: nessun dato viene inviato a servizi esterni. La libreria si carica solo
+quando premi "Scarica PDF", quindi non appesantisce l'avvio dell'app. Dopo aver aggiornato i file Netlify installa da solo la nuova
+dipendenza: non servono passaggi su Supabase.
