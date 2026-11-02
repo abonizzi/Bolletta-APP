@@ -345,7 +345,8 @@ export function lastBillInfo(bills: Bill[], categoryId: string): LastBillInfo | 
   const bill = list[0]
   const previous = list[1] ?? null
   const prevDaily = previous ? costPerDay(previous) : 0
-  const variationPct = previous && prevDaily > 0 ? ((costPerDay(bill) - prevDaily) / prevDaily) * 100 : null
+  // il confronto ha senso solo tra bollette di spesa: con un credito (importo negativo) non lo calcoliamo
+  const variationPct = previous && prevDaily > 0 && costPerDay(bill) > 0 ? ((costPerDay(bill) - prevDaily) / prevDaily) * 100 : null
   return { bill, previous, variationPct }
 }
 

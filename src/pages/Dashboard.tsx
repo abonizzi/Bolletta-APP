@@ -106,7 +106,7 @@ export function Dashboard() {
             tint={c.color}
             label={c.name}
             amount={Number(info.bill.amount)}
-            subtitle={billPeriodLabel(info.bill)}
+            subtitle={billPeriodLabel(info.bill) + (Number(info.bill.amount) < 0 ? ' · credito' : '')}
             variationPct={info.variationPct}
             variationLabel="rispetto alla bolletta precedente"
           />

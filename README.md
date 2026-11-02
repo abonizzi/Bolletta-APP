@@ -133,3 +133,13 @@ In **Statistiche → Esporta PDF** scegli un **mese**, un **anno** o un **period
 Il PDF viene creato **nel browser** con la libreria `pdf-lib`: nessun dato viene inviato a servizi esterni. La libreria si carica solo
 quando premi "Scarica PDF", quindi non appesantisce l'avvio dell'app. Dopo aver aggiornato i file Netlify installa da solo la nuova
 dipendenza: non servono passaggi su Supabase.
+
+## 12. Bollette a credito (rimborsi)
+
+Se una bolletta ti restituisce dei soldi, in **Nuova bolletta** spunta **"Bolletta a credito"** e scrivi l'importo senza segno
+(oppure scrivilo con il meno, es. -45,20): viene salvata come importo negativo. Compare in verde con la scritta "credito" e
+**riduce la spesa del periodo** in Home, Statistiche (totale, medie, grafici) e nel resoconto PDF. La lettura da foto riconosce
+da sola le bollette "a credito" e propone l'importo negativo.
+
+Se il database esisteva già, esegui una volta `supabase-migration-credit.sql` in Supabase → SQL Editor **prima** di pubblicare
+la nuova versione: toglie il vincolo che ammetteva solo importi positivi. Nelle installazioni nuove è già incluso in `supabase-schema.sql`.

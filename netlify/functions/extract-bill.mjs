@@ -21,6 +21,9 @@ PARTE 1 - DATI DELLA BOLLETTA (campo "bill")
   Se ci sono più periodi (letture o tariffe diverse) usa l'inizio del primo e la fine dell'ultimo.
 - amount: TOTALE DA PAGARE della bolletta in euro (IVA e imposte incluse), numero con il punto decimale.
   Non usare totali parziali, subtotali, acconti o importi di bollette precedenti.
+  Se la bolletta è A CREDITO (il cliente non deve pagare ma riceve un rimborso o ha un credito da incassare,
+  per esempio "importo a credito", "totale a credito", "rimborso") restituisci l'importo come numero NEGATIVO (es. -45.20).
+  Se invece la bolletta da pagare contiene solo una voce di credito/conguaglio a favore del cliente tra le altre, usa comunque il totale da pagare (positivo).
 - consumption_value: consumo FATTURATO nel periodo, numero. Luce: kWh totali. Gas: Smc (standard metri cubi, NON i kWh). Acqua: metri cubi.
   Non usare consumi annui, storici o di periodi precedenti. Se i consumi sono stimati e non letti, segnalalo in "notes".
 - consumption_unit: una tra "kWh", "m3", "Smc", "L", "ore", "pezzi", "none". Luce: "kWh". Gas: "Smc" (come scritto in bolletta). Acqua: "m3".

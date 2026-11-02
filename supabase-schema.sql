@@ -45,7 +45,7 @@ create table if not exists public.bills (
   consumption_value numeric,
   consumption_unit text
     check (consumption_unit in ('kWh','m3','Smc','L','EUR','ore','pezzi','none')),
-  amount numeric not null check (amount >= 0),
+  amount numeric not null, -- negativo = bolletta a credito (rimborso al cliente)
   due_date date,
   notes text,
   created_at timestamptz not null default now(),

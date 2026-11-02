@@ -30,6 +30,9 @@ const eur = (n: number) => safe(n.toLocaleString('it-IT', { style: 'currency', c
 const num2 = (n: number) => safe(n.toLocaleString('it-IT', { minimumFractionDigits: 2, maximumFractionDigits: 2 }))
 const num1 = (n: number) => safe(n.toLocaleString('it-IT', { maximumFractionDigits: 1 }))
 
+/** Importo in euro; in verde se negativo (bolletta a credito). */
+const money = (v: number): Cell => ({ text: eur(v), color: v < 0 ? GREEN : undefined })
+
 function hexToRgb(hex: string | undefined): RGB {
   const m = /^#?([0-9a-f]{6})$/i.exec(hex ?? '')
   if (!m) return rgb(0.58, 0.64, 0.72)
@@ -77,6 +80,7 @@ const LINE = rgb(0.886, 0.91, 0.941)
 const ZEBRA = rgb(0.972, 0.98, 0.988)
 const WHITE = rgb(1, 1, 1)
 const AMBER = rgb(0.71, 0.4, 0.02)
+const GREEN = rgb(0.02, 0.59, 0.41)
 
 export async function generateReportPdf(input: ReportInput): Promise<Uint8Array> {
   const { period, bills, categories, boxes, earnings } = input
@@ -253,21 +257,30 @@ export async function generateReportPdf(input: ReportInput): Promise<Uint8Array>
 
   function barChart(points: Array<{ label: string; value: number }>) {
     const barArea = 78
-    const total = 14 + barArea + 16
-    ensure(total + 8)
     const n = points.length
-    const max = Math.max(...points.map((p) => p.value), 1)
+    const maxV = Math.max(...points.map((p) => p.value), 0)
+    const minV = Math.min(...points.map((p) => p.value), 0)
+    const range = maxV - minV || 1
+    const total = 14 + barArea + (minV < 0 ? 26 : 16)
+    ensure(total + 8)
     const slot = CW / n
     const barW = Math.min(30, slot * 0.62)
-    const baseY = y - 14 - barArea
-    page.drawLine({ start: { x: MX, y: baseY }, end: { x: MX + CW, y: baseY }, thickness: 0.8, color: MUTED })
+    const bottom = y - 14 - barArea
+    // linea dello zero: le barre dei mesi in credito scendono sotto di essa
+    const zeroY = bottom + (-minV / range) * barArea
+    page.drawLine({ start: { x: MX, y: zeroY }, end: { x: MX + CW, y: zeroY }, thickness: 0.8, color: MUTED })
     const labelEvery = n > 24 ? 3 : n > 14 ? 2 : 1
     points.forEach((p, i) => {
       const cx = MX + (i + 0.5) * slot
-      const bh = Math.max((p.value / max) * barArea, p.value > 0 ? 1 : 0)
-      if (bh > 0) page.drawRectangle({ x: cx - barW / 2, y: baseY, width: barW, height: bh, color: BLUE_SOFT })
-      if (n <= 18 && p.value > 0) text(String(Math.round(p.value)), cx, baseY + bh + 3, 7, { align: 'center', color: INK })
-      if (i % labelEvery === 0) text(p.label, cx, baseY - 10, 7, { align: 'center', color: MUTED })
+      const h = p.value !== 0 ? Math.max((Math.abs(p.value) / range) * barArea, 1) : 0
+      if (h > 0) {
+        if (p.value > 0) page.drawRectangle({ x: cx - barW / 2, y: zeroY, width: barW, height: h, color: BLUE_SOFT })
+        else page.drawRectangle({ x: cx - barW / 2, y: zeroY - h, width: barW, height: h, color: GREEN })
+      }
+      if (n <= 18 && Math.abs(p.value) >= 0.5) {
+        text(String(Math.round(p.value)), cx, p.value > 0 ? zeroY + h + 3 : zeroY - h - 8, 7, { align: 'center', color: INK })
+      }
+      if (i % labelEvery === 0) text(p.label, cx, bottom - (minV < 0 ? 20 : 10), 7, { align: 'center', color: MUTED })
     })
     y -= total + 6
   }
@@ -318,7 +331,7 @@ export async function generateReportPdf(input: ReportInput): Promise<Uint8Array>
     // colonne: le categorie con più spesa, le altre raggruppate in "Altre"
     const totals = new Map<string, number>()
     for (const p of series) for (const [name, v] of Object.entries(p.byCategory)) totals.set(name, (totals.get(name) ?? 0) + v)
-    const ranked = [...totals.entries()].filter(([, v]) => v > 0.005).sort((a, b) => b[1] - a[1])
+    const ranked = [...totals.entries()].filter(([, v]) => Math.abs(v) > 0.005).sort((a, b) => Math.abs(b[1]) - Math.abs(a[1]))
     const MAX_COLS = 5
     const shown = ranked.slice(0, ranked.length > MAX_COLS ? MAX_COLS - 1 : MAX_COLS).map(([n]) => n)
     const hasOthers = ranked.length > shown.length
@@ -331,7 +344,7 @@ export async function generateReportPdf(input: ReportInput): Promise<Uint8Array>
       ...(hasOthers ? [{ header: 'Altre', width: catW, align: 'right' as const }] : []),
       { header: 'Totale', width: totalW, align: 'right' as const }
     ]
-    const dash = (v: number) => (v > 0.005 ? num2(v) : '-')
+    const dash = (v: number) => (Math.abs(v) > 0.005 ? num2(v) : '-')
     const rows: Row[] = series.map((p) => {
       const [yy, mm] = p.monthKey.split('-').map(Number)
       const others = Object.entries(p.byCategory).filter(([n]) => !shown.includes(n)).reduce((s, [, v]) => s + v, 0)
@@ -411,8 +424,8 @@ export async function generateReportPdf(input: ReportInput): Promise<Uint8Array>
           { text: cat?.name ?? 'Senza categoria', swatch: cat?.color },
           `${fmtIso(bill.billing_start)} - ${fmtIso(bill.billing_end)}`,
           bill.consumption_value != null ? `${num1(Number(bill.consumption_value))} ${unit}`.trim() : '-',
-          eur(Number(bill.amount) || 0),
-          eur((Number(bill.amount) || 0) * share),
+          money(Number(bill.amount) || 0),
+          money((Number(bill.amount) || 0) * share),
           fmtIso(bill.due_date)
         ],
         note: bill.notes ? `Note: ${bill.notes}` : undefined
@@ -420,9 +433,11 @@ export async function generateReportPdf(input: ReportInput): Promise<Uint8Array>
     })
     const sumFull = periodBills.reduce((s, x) => s + (Number(x.bill.amount) || 0), 0)
     const sumShare = periodBills.reduce((s, x) => s + (Number(x.bill.amount) || 0) * x.share, 0)
+    const hasCredit = periodBills.some((x) => Number(x.bill.amount) < 0)
     table(billCols, rows, { footer: { cells: ['Totale', '', '', eur(sumFull), eur(sumShare), ''] } })
     paragraph(
-      "L'importo è quello della bolletta; la quota nel periodo è la parte che cade nelle date del resoconto, in proporzione ai giorni del suo periodo di fatturazione. Le due cifre coincidono quando la bolletta è tutta dentro il periodo."
+      "L'importo è quello della bolletta; la quota nel periodo è la parte che cade nelle date del resoconto, in proporzione ai giorni del suo periodo di fatturazione. Le due cifre coincidono quando la bolletta è tutta dentro il periodo." +
+        (hasCredit ? ' Gli importi in verde con il segno meno sono bollette a credito: riducono la spesa.' : '')
     )
   }
 

@@ -43,9 +43,10 @@ export function BillDetails() {
           </div>
           <div>
             <p className="font-semibold text-lg text-slate-900 dark:text-white">{category?.name ?? 'Categoria eliminata'}</p>
-            <p className="text-2xl font-bold text-slate-900 dark:text-white">
+            <p className={`text-2xl font-bold ${Number(bill.amount) < 0 ? 'text-emerald-600 dark:text-emerald-400' : 'text-slate-900 dark:text-white'}`}>
               {Number(bill.amount).toLocaleString('it-IT', { style: 'currency', currency: 'EUR' })}
             </p>
+            {Number(bill.amount) < 0 && <p className="text-xs text-emerald-600 dark:text-emerald-400">Bolletta a credito: riduce la spesa del periodo</p>}
           </div>
         </div>
 

@@ -2,6 +2,7 @@ import { Link } from 'react-router-dom'
 import type { Bill, Category } from '@/types'
 
 export function BillCard({ bill, category }: { bill: Bill; category?: Category }) {
+  const isCredit = Number(bill.amount) < 0
   const date = bill.due_date ? new Date(bill.due_date) : new Date(bill.billing_start)
   return (
     <Link
@@ -19,9 +20,10 @@ export function BillCard({ bill, category }: { bill: Bill; category?: Category }
         <p className="text-xs text-slate-400">
           {date.toLocaleDateString('it-IT', { day: '2-digit', month: 'short', year: 'numeric' })}
           {bill.due_date ? ' · scadenza' : ''}
+          {isCredit ? ' · credito' : ''}
         </p>
       </div>
-      <p className="font-semibold text-slate-900 dark:text-white shrink-0">
+      <p className={`font-semibold shrink-0 ${isCredit ? 'text-emerald-600 dark:text-emerald-400' : 'text-slate-900 dark:text-white'}`}>
         {Number(bill.amount).toLocaleString('it-IT', { style: 'currency', currency: 'EUR' })}
       </p>
     </Link>

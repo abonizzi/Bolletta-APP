@@ -3,6 +3,7 @@ import { Loader2, Sparkles, Sun, AlertTriangle } from 'lucide-react'
 import type { Bill, Category, ConsumptionUnit, EbittsEarning } from '@/types'
 import { UNIT_LABELS } from '@/types'
 import { extractBillFromFile } from '@/services/extraction'
+import { parseBillAmount } from '@/lib/amount'
 import { EbittsDraftList, draftsFromItems, validateDrafts, type Draft, type NewEarning } from '@/components/EbittsDrafts'
 
 const UNITS: ConsumptionUnit[] = ['kWh', 'm3', 'Smc', 'L', 'EUR', 'ore', 'pezzi', 'none']
@@ -40,7 +41,9 @@ export function BillForm({
   const [billingEnd, setBillingEnd] = useState(toInputDate(initial?.billing_end))
   const [consumption, setConsumption] = useState(initial?.consumption_value?.toString() ?? '')
   const [unit, setUnit] = useState<ConsumptionUnit>(initial?.consumption_unit ?? selectedCategory?.consumption_unit ?? 'none')
-  const [amount, setAmount] = useState(initial?.amount?.toString() ?? '')
+  // un credito (rimborso al cliente) è salvato con importo negativo; nel modulo si scrive l'importo senza segno
+  const [amount, setAmount] = useState(initial?.amount != null ? String(Math.abs(Number(initial.amount))) : '')
+  const [isCredit, setIsCredit] = useState(Number(initial?.amount ?? 0) < 0)
   const [dueDate, setDueDate] = useState(toInputDate(initial?.due_date))
   const [notes, setNotes] = useState(initial?.notes ?? '')
   const [error, setError] = useState<string | null>(null)
@@ -82,8 +85,10 @@ export function BillForm({
         missing.push('periodo di fatturazione')
       }
 
-      if (b.amount != null) setAmount(String(b.amount))
-      else missing.push('importo')
+      if (b.amount != null) {
+        setAmount(String(Math.abs(b.amount)))
+        setIsCredit(b.amount < 0)
+      } else missing.push('importo')
 
       const effectiveUnit: ConsumptionUnit = b.consumption_unit ?? cat?.consumption_unit ?? unit
       setUnit(effectiveUnit)
@@ -111,7 +116,8 @@ export function BillForm({
     if (!categoryId) return setError('Seleziona una categoria.')
     if (!billingStart || !billingEnd) return setError('Indica il periodo di fatturazione.')
     if (new Date(billingEnd) < new Date(billingStart)) return setError('La data di fine periodo deve essere successiva alla data di inizio.')
-    if (!amount || Number(amount.replace(',', '.')) <= 0) return setError('Indica un importo valido.')
+    const signedAmount = parseBillAmount(amount, isCredit)
+    if (signedAmount === null) return setError('Indica un importo valido (diverso da zero).')
 
     let earnings: NewEarning[] = []
     let duplicates = 0
@@ -131,7 +137,7 @@ export function BillForm({
           billing_end: billingEnd,
           consumption_value: consumption ? Number(consumption.replace(',', '.')) : null,
           consumption_unit: unit,
-          amount: Number(amount.replace(',', '.')),
+          amount: signedAmount,
           due_date: dueDate || null,
           notes: notes || null
         },
@@ -255,6 +261,11 @@ export function BillForm({
           className="input"
           placeholder="es. 82,34"
         />
+        <label className="flex items-center gap-2 mt-2 text-sm text-slate-700 dark:text-slate-300">
+          <input type="checkbox" checked={isCredit} onChange={(e) => setIsCredit(e.target.checked)} className="rounded" />
+          Bolletta a credito (ti restituiscono dei soldi)
+        </label>
+        {isCredit && <p className="text-xs text-emerald-600 dark:text-emerald-400 mt-1">Sarà registrata come credito e ridurrà la spesa del periodo.</p>}
       </div>
 
       <div>
